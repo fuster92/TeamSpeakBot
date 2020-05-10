@@ -9,6 +9,7 @@
 package control;
 
 import modelo.BotTeamSpeak;
+import modelo.Comando;
 import modelo.TSServer;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
@@ -17,12 +18,13 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 import java.util.HashMap;
 import java.util.Map;
 
+import static control.LanzarBot.configuracion;
+
 /**
  * Clase de ProcesadorUpdates
  */
 public class ProcesadorUpdates {
 
-    private static final long TIEMPO_MIN_COMANDOS = 10000;
     private static final String MENSAJE_LISTILLO = "Esperate un poco anda chusto";
     private static ProcesadorUpdates instancia = null; //Es singleton
     private static int MI_ID = 5376156;
@@ -30,23 +32,17 @@ public class ProcesadorUpdates {
     private static final String SERVER_APAGADO = "Ya he apagado el server, ";
     private static final String SERVER_ENCENDIDO = "Ya lo tienes encendido, ";
 
-
-    private static final String START = "start";
-    private static final String APAGAR = "apagar";
-    private static final String APAGAR_BOT = "apagarbot";
-    private static final String ENCENDER = "encender";
-    private static final String HELP = "help";
-    private static final String PLAY = "play";
-
     private Map<Long, Long> ultimoComandoUsuario = new HashMap<>();
-
-    private static final String[] comandos = {START, APAGAR, APAGAR_BOT, ENCENDER};
 
     private static final String MENSAJE_COMANDO_NO_VALIDO = "Eso no es un comando ababol";
     private static final String MENSAJE_PRESENTACION = "Que pasa locuelos";
 
 
     private BotTeamSpeak bot;
+
+    private boolean esAdmin = false;
+    private boolean notificacionActivada = false;
+    private Long idUsuario = 0L;
 
     /**
      * Construye un ProcesadorUpdates
@@ -67,6 +63,9 @@ public class ProcesadorUpdates {
     }
 
     public void procesar(Update update) {
+        idUsuario = obtenerIdUsuario(update);
+        esAdmin = esAdmin(update);
+
         if (esMensajeTexto(update)){
             procesarTexto(update);
         }
@@ -84,46 +83,110 @@ public class ProcesadorUpdates {
      * Procesa un mensaje de texto
      */
     private void procesarTexto(Update update){
-        long idUsuario = obtenerIdUsuario(update);
-        ultimoComandoUsuario.put(idUsuario, System.currentTimeMillis());
+
         if (esComando(update)) {
-            String recibido = update.getMessage().getText().substring(1).toLowerCase();
-            String[] comando = recibido.split(" ");
-            switch (comando[0]){
+            ultimoComandoUsuario.put(idUsuario, System.currentTimeMillis());
+            ejecutarComando(update);
+        }
+    }
+
+    /**
+     * Ejecuta el comando pasado
+     * @param update
+     */
+    private void ejecutarComando(Update update) {
+        String recibido = update.getMessage().getText();
+        Comando comandoRecibido = Comando.leeComando(recibido);
+        //Si el comando no necesita administrador o el user es
+        if (!comandoRecibido.necesitaAdmin() || esAdmin) {
+            if (comandoRecibido != Comando.COMANDO_NO_VALIDO  && notificacionActivada){
+                notificarAdmin(update, comandoRecibido);
+            }
+            switch (Comando.leeComando(recibido)){
 
                 case START:
                     enviarMensaje(update, MENSAJE_PRESENTACION);
                     break;
 
                 case HELP:
+                    listarComandos(update);
                     break;
 
-                case APAGAR:
+                case APAGAR_TS:
                     comandoApagar(update);
                     break;
 
-                case ENCENDER:
+                case ENCENDER_TS:
                     comandoEncender(update);
-                    break;
-
-                case PLAY:
-
                     break;
 
                 case APAGAR_BOT:
                     apagarBot(update);
+                    break;
 
-                default:
-                    enviarMensaje(update, MENSAJE_COMANDO_NO_VALIDO);
+                case NOTIFICAR:
+                    toggleNotificacion();
+                    break;
+
+                case COMANDO_NO_VALIDO:
+                    enviarMensaje(update, Comando.COMANDO_NO_VALIDO.devuelveDescripcion());
                     break;
             }
+        } else {
+            enviarMensaje(update, "No tienes permisos para esto");
         }
     }
 
     /**
-     * Obtiene el id del usuario
+     * Activa o desactiva la notificacion
+     */
+    private void toggleNotificacion() {
+        if (notificacionActivada){
+            enviarMensajeAdmin("Quitando notificaciones");
+        } else {
+            enviarMensajeAdmin("Activando notificaciones");
+        }
+        notificacionActivada = !notificacionActivada;
+    }
+
+    /**
+     * Manda un listado de comandos
      * @param update
-     * @return
+     */
+    private void listarComandos(Update update) {
+        enviarMensaje(update, Comando.listarComandos(esAdmin));
+    }
+
+    /**
+     * Notifica al admin
+     */
+    private void notificarAdmin(Update update, Comando comando){
+        if (esAdmin){
+            return;
+        }
+        String texto = "Usuario " +
+                obtenerIdUsuario(update) + ":" +
+                obtenerNombreUsuario(update) + " Comando " + comando;
+        enviarMensajeAdmin(texto);
+    }
+
+    /**
+     * Envia un mensaje al admin
+     * @param texto
+     */
+    private void enviarMensajeAdmin(String texto) {
+        SendMessage mensaje = new SendMessage();
+        mensaje.setText(texto);
+        mensaje.setChatId(configuracion.getProperty(LanzarBot.ID_CHAT_ADMIN));
+        enviarMensaje(mensaje);
+    }
+
+    private String obtenerNombreUsuario(Update update) {
+        return update.getMessage().getChat().getUserName();
+    }
+
+    /**
+     * Obtiene el id del usuario
      */
     private Long obtenerIdUsuario(Update update) {
         return update.getMessage().getChat().getId();
@@ -133,11 +196,7 @@ public class ProcesadorUpdates {
      * Apaga el bot
      */
     private void apagarBot(Update update) {
-        if (esAdmin(update)){
-            System.exit(0);
-        } else {
-            enviarMensaje(update, "No eres admin shur");
-        }
+        System.exit(0);
     }
 
     /**
@@ -145,7 +204,7 @@ public class ProcesadorUpdates {
      */
     private boolean esAdmin(Update update) {
         // TODO: 01/05/2020 implementar mejor solución
-        return update.getMessage().getFrom().getId() == MI_ID;
+        return obtenerIdUsuario(update) == MI_ID;
     }
 
     /**
@@ -161,21 +220,9 @@ public class ProcesadorUpdates {
      * Acciones para el comando de apagar
      */
     private void comandoApagar(Update update) {
-        if (haPasadoSuficienteTiempo(update)){
-            apagarServerTs();
-            enviarMensaje(update, SERVER_APAGADO + devuelveNombreEmisor(update));
-        }else {
-            enviarMensaje(update, MENSAJE_LISTILLO);
-        }
-    }
-
-    /**
-     * Comprueba si el usuario se esta pasando de enviar comandos
-     * @return
-     * @param update
-     */
-    private boolean haPasadoSuficienteTiempo(Update update) {
-        return (System.currentTimeMillis() - ultimoComandoUsuario.get(obtenerIdUsuario(update))) > TIEMPO_MIN_COMANDOS;
+        apagarServerTs();
+        enviarMensaje(update, SERVER_APAGADO + devuelveNombreEmisor(update));
+        notificarAdmin(update, Comando.APAGAR_TS);
     }
 
     /**
@@ -199,7 +246,7 @@ public class ProcesadorUpdates {
     /**
      * Intenta envíar un mensaje
      */
-    private void enviarMensaje(SendMessage message) {
+    public synchronized void enviarMensaje(SendMessage message) {
         try {
             bot.execute(message);
         } catch (TelegramApiException e) {

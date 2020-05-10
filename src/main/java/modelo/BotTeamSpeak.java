@@ -53,7 +53,6 @@ public class BotTeamSpeak extends TelegramLongPollingBot{
 
     @Override
     public void onUpdateReceived(Update update) {
-        // We check if the update has a message and the message has text
         procesadorUpdates.procesar(update);
     }
 
@@ -65,9 +64,5 @@ public class BotTeamSpeak extends TelegramLongPollingBot{
     @Override
     public String getBotToken() {
         return TOKEN_BOT;
-    }
-
-    private void notificarControl(Update update){
-
     }
 }
