@@ -6,9 +6,8 @@
  * Versión 0.0
  */
 
-package modelo;
+package modelo.utils;
 
-import java.util.regex.Pattern;
 // TODO: 05/05/2020 Que sea esta clase la que llame a los comandos
 /**
  * Clase de Comando
@@ -17,6 +16,8 @@ public enum  Comando {
     START("start", "Comando inicial"),
     APAGAR_TS("apagar", "Apaga el servidor de TS"),
     APAGAR_BOT("apagarbot", "Apaga el bot, solo admin", true),
+    APAGAR_SERVER_CARO("apagarServerCaro", "Apaga el servidor caro", true),
+    ENCENDER_SERVER_CARO("encenderServerCaro", "Enciende el servidor caro", true),
     ENCENDER_TS("encender", "Enciende el servidor de TS"),
     HELP("help", "Lista los comandos"),
     NOTIFICAR("notificar", "Notifica de los comandos enviados", true),
@@ -73,7 +74,7 @@ public enum  Comando {
             String recibido = cadena.substring(1).toLowerCase();
             String[] cadenasRecibidas = recibido.split(" ");
             for (Comando comando : Comando.values()){
-                if (cadenasRecibidas[0].equals(comando.nombre)){
+                if (cadenasRecibidas[0].equalsIgnoreCase(comando.nombre)){
                     return comando;
                 }
             }

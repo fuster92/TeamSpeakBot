@@ -9,7 +9,8 @@
 package control;
 
 import modelo.BotTeamSpeak;
-import modelo.Comando;
+import modelo.Instancia;
+import modelo.utils.Comando;
 import modelo.TSServer;
 import org.telegram.telegrambots.meta.api.methods.send.SendMessage;
 import org.telegram.telegrambots.meta.api.objects.Update;
@@ -17,13 +18,15 @@ import org.telegram.telegrambots.meta.exceptions.TelegramApiException;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import static control.LanzarBot.configuracion;
 
 /**
  * Clase de ProcesadorUpdates
  */
-public class ProcesadorUpdates {
+public class ProcesadorUpdates  {
 
     private static final String MENSAJE_LISTILLO = "Esperate un poco anda chusto";
     private static ProcesadorUpdates instancia = null; //Es singleton
@@ -39,6 +42,8 @@ public class ProcesadorUpdates {
 
 
     private BotTeamSpeak bot;
+    private Instancia server;
+    private ExecutorService executorService;
 
     private boolean esAdmin = false;
     private boolean notificacionActivada = false;
@@ -48,16 +53,19 @@ public class ProcesadorUpdates {
      * Construye un ProcesadorUpdates
      * @param bot
      */
-    private ProcesadorUpdates(BotTeamSpeak bot) {
+    private ProcesadorUpdates(BotTeamSpeak bot, Instancia server) {
         this.bot = bot;
+        this.server = server;
+
+        executorService = Executors.newFixedThreadPool(8);
     }
 
     /**
      * Devuelve la instancia
      */
-    public static ProcesadorUpdates devolverInstancia(BotTeamSpeak bot) {
+    public static ProcesadorUpdates devolverInstancia(BotTeamSpeak bot, Instancia server) {
         if (instancia == null) {
-            instancia = new ProcesadorUpdates(bot);
+            instancia = new ProcesadorUpdates(bot, server);
         }
         return instancia;
     }
@@ -94,47 +102,74 @@ public class ProcesadorUpdates {
      * Ejecuta el comando pasado
      * @param update
      */
-    private void ejecutarComando(Update update) {
-        String recibido = update.getMessage().getText();
-        Comando comandoRecibido = Comando.leeComando(recibido);
-        //Si el comando no necesita administrador o el user es
-        if (!comandoRecibido.necesitaAdmin() || esAdmin) {
-            if (comandoRecibido != Comando.COMANDO_NO_VALIDO  && notificacionActivada){
-                notificarAdmin(update, comandoRecibido);
+    private void ejecutarComando(final Update update) {
+        executorService.submit(new Runnable() {
+            public void run() {
+                String recibido = update.getMessage().getText();
+                Comando comandoRecibido = Comando.leeComando(recibido);
+                System.out.println(comandoRecibido);
+                //Si el comando no necesita administrador o el user es
+                if (!comandoRecibido.necesitaAdmin() || esAdmin) {
+                    if (comandoRecibido != Comando.COMANDO_NO_VALIDO  && notificacionActivada){
+                        notificarAdmin(update, comandoRecibido);
+                    }
+                    switch (Comando.leeComando(recibido)){
+
+                        case START:
+                            enviarMensaje(update, MENSAJE_PRESENTACION);
+                            break;
+
+                        case HELP:
+                            listarComandos(update);
+                            break;
+
+                        case APAGAR_TS:
+                            comandoApagar(update);
+                            break;
+
+                        case ENCENDER_TS:
+                            comandoEncender(update);
+                            break;
+
+                        case APAGAR_BOT:
+                            apagarBot(update);
+                            break;
+
+                        case ENCENDER_SERVER_CARO:
+                            encenderServerCaro();
+                            break;
+
+                        case APAGAR_SERVER_CARO:
+                            apagarServerCaro();
+                            break;
+
+                        case NOTIFICAR:
+                            toggleNotificacion();
+                            break;
+
+                        case COMANDO_NO_VALIDO:
+                            enviarMensaje(update, Comando.COMANDO_NO_VALIDO.devuelveDescripcion());
+                            break;
+                    }
+                } else {
+                    enviarMensaje(update, "No tienes permisos para esto");
+                }
             }
-            switch (Comando.leeComando(recibido)){
+        });
+    }
 
-                case START:
-                    enviarMensaje(update, MENSAJE_PRESENTACION);
-                    break;
+    /**
+     * Apaga el server caro
+     */
+    private void apagarServerCaro() {
+        server.apagar();
+    }
 
-                case HELP:
-                    listarComandos(update);
-                    break;
-
-                case APAGAR_TS:
-                    comandoApagar(update);
-                    break;
-
-                case ENCENDER_TS:
-                    comandoEncender(update);
-                    break;
-
-                case APAGAR_BOT:
-                    apagarBot(update);
-                    break;
-
-                case NOTIFICAR:
-                    toggleNotificacion();
-                    break;
-
-                case COMANDO_NO_VALIDO:
-                    enviarMensaje(update, Comando.COMANDO_NO_VALIDO.devuelveDescripcion());
-                    break;
-            }
-        } else {
-            enviarMensaje(update, "No tienes permisos para esto");
-        }
+    /**
+     * Enciende el server caro
+     */
+    private synchronized void encenderServerCaro() {
+        server.encender();
     }
 
     /**

@@ -30,7 +30,7 @@ public class TSServer {
     /**
      * Enciende el server de ts
      */
-    public static void encender(){
+    public static synchronized void encender(){
         CommandLine SYSTEMCTL = CommandLine.parse(COMANDO);
         SYSTEMCTL.addArgument(START);
         SYSTEMCTL.addArgument("teamspeak");
@@ -45,7 +45,7 @@ public class TSServer {
     /**
      * Apaga el server de TeamSpeak
      */
-    public static void apagar() {
+    public static synchronized void apagar() {
         CommandLine SYSTEMCTL = CommandLine.parse(COMANDO);
         SYSTEMCTL.addArgument(STOP);
         SYSTEMCTL.addArgument(TEAMSPEAK);
